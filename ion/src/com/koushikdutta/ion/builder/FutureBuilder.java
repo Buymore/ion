@@ -1,8 +1,6 @@
 package com.koushikdutta.ion.builder;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.reflect.TypeToken;
+import com.koushikdutta.async.DataEmitter;
 import com.koushikdutta.async.parser.AsyncParser;
 import com.koushikdutta.ion.future.ResponseFuture;
 
@@ -11,6 +9,7 @@ import org.w3c.dom.Document;
 import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.Charset;
 
 /**
 * Created by koush on 5/30/13.
@@ -23,12 +22,25 @@ public interface FutureBuilder extends BitmapFutureBuilder, ImageViewFutureBuild
     public ResponseFuture<String> asString();
 
     /**
+     * Execute the request and get the result as a String
+     * @param charset Specify a charset to use.
+     * @return
+     */
+    public ResponseFuture<String> asString(Charset charset);
+
+    /**
      * Execute the request and get the result as an InputStream.
      * This method will load the entire response into memory
      * and should not be used for large responses.
      * @return
      */
     public ResponseFuture<InputStream> asInputStream();
+
+    /**
+     * Execute the request and get the result as a DataEmitter.
+     * @return
+     */
+    public ResponseFuture<DataEmitter> asDataEmitter();
 
     /**
      * Execute the request and get the result as an XML Document

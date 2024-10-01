@@ -11,9 +11,11 @@ import com.koushikdutta.async.future.SimpleFuture;
 import com.koushikdutta.async.util.StreamUtility;
 import com.koushikdutta.ion.Ion;
 import com.koushikdutta.ion.Loader;
+import com.koushikdutta.ion.ResponseServedFrom;
 import com.koushikdutta.ion.bitmap.BitmapInfo;
 import com.koushikdutta.ion.bitmap.IonBitmapCache;
 import com.koushikdutta.ion.gif.GifDecoder;
+import com.koushikdutta.ion.gif.GifFrame;
 
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -23,9 +25,10 @@ import java.nio.ByteBuffer;
  */
 public class StreamLoader extends SimpleLoader {
     protected BitmapInfo loadGif(String key, Point size, InputStream in, BitmapFactory.Options options) throws Exception {
-        BitmapInfo info = new BitmapInfo(key, options.outMimeType, null, size);
-        info.gifDecoder = new GifDecoder(ByteBuffer.wrap(StreamUtility.readToEndAsArray(in)));
-        info.gifDecoder.nextFrame();
+        GifDecoder gifDecoder = new GifDecoder(ByteBuffer.wrap(StreamUtility.readToEndAsArray(in)));
+        GifFrame frame = gifDecoder.nextFrame();
+        BitmapInfo info = new BitmapInfo(key, options.outMimeType, frame.image, size);
+        info.gifDecoder = gifDecoder;
         return info;
     }
 
@@ -58,7 +61,7 @@ public class StreamLoader extends SimpleLoader {
                             throw new Exception("Bitmap failed to load");
                         info = new BitmapInfo(key, options.outMimeType, bitmap, size);
                     }
-                    info.loadedFrom =  Loader.LoaderEmitter.LOADED_FROM_CACHE;
+                    info.servedFrom = ResponseServedFrom.LOADED_FROM_CACHE;
                     ret.setComplete(info);
                 }
                 catch (OutOfMemoryError e) {

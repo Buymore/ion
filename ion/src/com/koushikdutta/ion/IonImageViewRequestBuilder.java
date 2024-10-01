@@ -1,8 +1,10 @@
 package com.koushikdutta.ion;
 
+import android.annotation.TargetApi;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.os.Looper;
 import android.view.animation.Animation;
 import android.widget.ImageView;
@@ -27,7 +29,9 @@ public class IonImageViewRequestBuilder extends IonBitmapRequestBuilder implemen
     int loadAnimationResource;
     int inAnimationResource;
     ContextReference.ImageViewContextReference imageViewPostRef;
-    boolean fadeIn;
+    boolean fadeIn = true;
+    boolean crossfade;
+    BitmapDrawableFactory bitmapDrawableFactory = BitmapDrawableFactory.DEFAULT;
 
     public IonImageViewRequestBuilder(IonRequestBuilder builder) {
         super(builder);
@@ -41,8 +45,10 @@ public class IonImageViewRequestBuilder extends IonBitmapRequestBuilder implemen
     void reset() {
         super.reset();
         fadeIn = true;
+        crossfade = false;
         imageViewPostRef = null;
         placeholderDrawable = null;
+        bitmapDrawableFactory = BitmapDrawableFactory.DEFAULT;
         placeholderResource = 0;
         errorDrawable = null;
         errorResource = 0;
@@ -79,7 +85,7 @@ public class IonImageViewRequestBuilder extends IonBitmapRequestBuilder implemen
         return this;
     }
 
-    private IonDrawable setIonDrawable(ImageView imageView, BitmapFetcher bitmapFetcher, int loadedFrom) {
+    private IonDrawable setIonDrawable(ImageView imageView, BitmapFetcher bitmapFetcher, ResponseServedFrom servedFrom) {
         BitmapInfo info = null;
         if (bitmapFetcher != null)
             info = bitmapFetcher.info;
@@ -88,13 +94,15 @@ public class IonImageViewRequestBuilder extends IonBitmapRequestBuilder implemen
 
         IonDrawable ret = IonDrawable.getOrCreateIonDrawable(imageView)
         .ion(ion)
-        .setBitmap(info, loadedFrom)
+        .setBitmap(info, servedFrom)
         .setBitmapFetcher(bitmapFetcher)
         .setRepeatAnimation(animateGifMode == AnimateGifMode.ANIMATE)
         .setSize(resizeWidth, resizeHeight)
         .setError(errorResource, errorDrawable)
         .setPlaceholder(placeholderResource, placeholderDrawable)
-        .setFadeIn(fadeIn);
+        .setFadeIn(fadeIn || crossfade)
+        .setBitmapDrawableFactory(bitmapDrawableFactory)
+        .updateLayers();
         imageView.setImageDrawable(ret);
         return ret;
     }
@@ -105,25 +113,42 @@ public class IonImageViewRequestBuilder extends IonBitmapRequestBuilder implemen
         return this;
     }
 
+    @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
+    private static boolean getAdjustViewBounds_16(ImageView imageView) {
+        return imageView.getAdjustViewBounds();
+    }
+
+    private static boolean getAdjustViewBounds(ImageView imageView) {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN && getAdjustViewBounds_16(imageView);
+    }
+
     @Override
     public ImageViewFuture intoImageView(ImageView imageView) {
-        assert Thread.currentThread() == Looper.getMainLooper().getThread();
         if (imageView == null)
             throw new NullPointerException("imageView");
 
         // no uri? just set a placeholder and bail
         if (builder.uri == null) {
-            setIonDrawable(imageView, null, 0).cancel();
+            setIonDrawable(imageView, null, ResponseServedFrom.LOADED_FROM_NETWORK).cancel();
             return ImageViewFutureImpl.FUTURE_IMAGEVIEW_NULL_URI;
         }
 
         withImageView(imageView);
 
+        if (crossfade) {
+            Drawable drawable = imageView.getDrawable();
+            if (drawable instanceof IonDrawable) {
+                IonDrawable ionDrawable = (IonDrawable)drawable;
+                drawable = ionDrawable.getCurrentDrawable();
+            }
+            placeholder(drawable);
+        }
+
         int sampleWidth = resizeWidth;
         int sampleHeight = resizeHeight;
         // see if we need default transforms, or this if the imageview
         // will request the actual size on measure
-        if (resizeHeight == 0 && resizeWidth == 0) {
+        if (resizeHeight == 0 && resizeWidth == 0 && !getAdjustViewBounds(imageView)) {
             // set the sample size hints from the current dimensions
             // but don't actually apply a transform.
             // this may be zero, in which case IonDrawable
@@ -140,7 +165,7 @@ public class IonImageViewRequestBuilder extends IonBitmapRequestBuilder implemen
         BitmapFetcher bitmapFetcher = executeCache(sampleWidth, sampleHeight);
         if (bitmapFetcher.info != null) {
             doAnimation(imageView, null, 0);
-            IonDrawable drawable = setIonDrawable(imageView, bitmapFetcher, Loader.LoaderEmitter.LOADED_FROM_MEMORY);
+            IonDrawable drawable = setIonDrawable(imageView, bitmapFetcher, ResponseServedFrom.LOADED_FROM_MEMORY);
             drawable.cancel();
             ImageViewFutureImpl imageViewFuture = ImageViewFutureImpl.getOrCreateImageViewFuture(imageViewPostRef, drawable)
             .setInAnimation(inAnimation, inAnimationResource)
@@ -151,7 +176,7 @@ public class IonImageViewRequestBuilder extends IonBitmapRequestBuilder implemen
             return imageViewFuture;
         }
 
-        IonDrawable drawable = setIonDrawable(imageView, bitmapFetcher, 0);
+        IonDrawable drawable = setIonDrawable(imageView, bitmapFetcher, ResponseServedFrom.LOADED_FROM_NETWORK);
         doAnimation(imageView, loadAnimation, loadAnimationResource);
         ImageViewFutureImpl imageViewFuture = ImageViewFutureImpl.getOrCreateImageViewFuture(imageViewPostRef, drawable)
         .setInAnimation(inAnimation, inAnimationResource)
@@ -198,15 +223,8 @@ public class IonImageViewRequestBuilder extends IonBitmapRequestBuilder implemen
 
     @Override
     public IonImageViewRequestBuilder crossfade(boolean crossfade) {
-        if (!crossfade)
-            return this;
-        ImageView iv = imageViewPostRef.get();
-        Drawable drawable = iv.getDrawable();
-        if (drawable instanceof IonDrawable) {
-            IonDrawable ionDrawable = (IonDrawable)drawable;
-            drawable = ionDrawable.getCurrentDrawable();
-        }
-        return placeholder(drawable);
+        this.crossfade = crossfade;
+        return this;
     }
 
     @Override
@@ -254,6 +272,12 @@ public class IonImageViewRequestBuilder extends IonBitmapRequestBuilder implemen
     @Override
     public IonImageViewRequestBuilder animateIn(int animationResource) {
         inAnimationResource = animationResource;
+        return this;
+    }
+
+    @Override
+    public IonImageViewRequestBuilder bitmapDrawableFactory(BitmapDrawableFactory bitmapDrawableFactory) {
+        this.bitmapDrawableFactory = bitmapDrawableFactory;
         return this;
     }
 }

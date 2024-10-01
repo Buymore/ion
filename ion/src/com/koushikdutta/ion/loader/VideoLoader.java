@@ -4,7 +4,6 @@ import android.annotation.TargetApi;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Point;
 import android.media.MediaMetadataRetriever;
 import android.media.ThumbnailUtils;
@@ -14,6 +13,7 @@ import android.provider.MediaStore;
 import com.koushikdutta.async.future.Future;
 import com.koushikdutta.async.future.SimpleFuture;
 import com.koushikdutta.ion.Ion;
+import com.koushikdutta.ion.ResponseServedFrom;
 import com.koushikdutta.ion.bitmap.BitmapInfo;
 
 import java.io.File;
@@ -27,7 +27,14 @@ public class VideoLoader extends SimpleLoader {
     public static Bitmap createVideoThumbnail(String filePath) throws Exception {
         MediaMetadataRetriever retriever = new MediaMetadataRetriever();
         retriever.setDataSource(filePath);
-        return retriever.getFrameAtTime();
+        try {
+            return retriever.getFrameAtTime();
+        } finally {
+            try {
+                retriever.release();
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     static boolean mustUseThumbnailUtils() {
@@ -73,7 +80,7 @@ public class VideoLoader extends SimpleLoader {
                             bmp = Bitmap.createScaledBitmap(bmp, (int) (bmp.getWidth() * ratio), (int) (bmp.getHeight() * ratio), true);
                     }
                     BitmapInfo info = new BitmapInfo(key, type.mimeType, bmp, originalSize);
-                    info.loadedFrom = LoaderEmitter.LOADED_FROM_CACHE;
+                    info.servedFrom = ResponseServedFrom.LOADED_FROM_CACHE;
                     ret.setComplete(info);
                 }
                 catch (OutOfMemoryError e) {

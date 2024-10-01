@@ -19,6 +19,9 @@ import com.koushikdutta.async.http.server.AsyncHttpServerResponse;
 import com.koushikdutta.async.http.server.HttpServerRequestCallback;
 import com.koushikdutta.async.util.StreamUtility;
 import com.koushikdutta.ion.Ion;
+import com.koushikdutta.ion.gif.GifDecoder;
+
+import junit.framework.Assert;
 
 import java.io.File;
 import java.util.Arrays;
@@ -44,6 +47,39 @@ public class Issues extends AndroidTestCase {
         assertEquals(data, data2);
     }
 
+    public void testSpdyReuse() throws Exception {
+        String data = Ion.with(getContext()).load("https://raw.github.com/koush/AndroidAsync/master/AndroidAsyncTest/testdata/test.json")
+        .setLogging("MyLogs", Log.VERBOSE)
+        .asString().get();
+
+        String data2 = Ion.with(getContext()).load("https://raw.github.com/koush/AndroidAsync/master/AndroidAsyncTest/testdata/test.json")
+        .setLogging("MyLogs", Log.VERBOSE)
+        .asString().get();
+
+        Ion.with(getContext()).load("https://raw.github.com/koush/AndroidAsync/master/AndroidAsyncTest/testdata/test.json")
+        .setLogging("MyLogs", Log.VERBOSE)
+        .asString().get();
+
+        Ion.with(getContext()).load("https://raw.github.com/koush/AndroidAsync/master/AndroidAsyncTest/testdata/test.json")
+        .setLogging("MyLogs", Log.VERBOSE)
+        .asString().get();
+
+        Ion.with(getContext()).load("https://raw.github.com/koush/AndroidAsync/master/AndroidAsyncTest/testdata/test.json")
+        .setLogging("MyLogs", Log.VERBOSE)
+        .asString().get();
+
+        Ion.with(getContext()).load("https://raw.github.com/koush/AndroidAsync/master/AndroidAsyncTest/testdata/test.json")
+        .setLogging("MyLogs", Log.VERBOSE)
+        .asString().get();
+
+        Ion.with(getContext()).load("https://raw.github.com/koush/AndroidAsync/master/AndroidAsyncTest/testdata/test.json")
+        .setLogging("MyLogs", Log.VERBOSE)
+        .asString().get();
+
+        assertEquals(data, data2);
+    }
+
+    // url is dead, test will fail
     public void testIssue126() throws Exception {
         Bitmap bitmap = Ion.with(getContext())
         .load("http://bdc.tsingyuan.cn/api/img?w=advanced")
@@ -258,5 +294,98 @@ public class Issues extends AndroidTestCase {
         .get();
 
         System.out.println(ret);
+    }
+
+    public void testIon428() throws Exception {
+        Ion.with(getContext())
+        .load("https://cdn2.vox-cdn.com/thumbor/KxtZNw37jKNfxdA0hX5edHvbTBE=/0x0:2039x1359/800x536/cdn0.vox-cdn.com/uploads/chorus_image/image/44254028/lg-g-watch.0.0.jpg")
+        .asString()
+        .get();
+    }
+
+    public void testIon450() throws Exception {
+        Ion.getDefault(getContext())
+        .configure().setLogging("Test", Log.VERBOSE);
+
+        Ion.with(getContext())
+        .load("https://api.instagram.com/v1/users/self/feed")
+        .asString()
+        .get();
+
+        Ion.with(getContext())
+        .load("https://api.instagram.com/v1/users/self/feed")
+        .asString()
+        .get();
+
+        Ion.with(getContext())
+        .load("https://api.instagram.com/v1/users/self/feed")
+        .asString()
+        .get();
+    }
+
+    public void testIon559() throws Exception {
+        Ion.with(getContext())
+        .load("https://saren.wtako.net/Teikoku.Shounen.jpg")
+        .asBitmap()
+        .get();
+    }
+
+    public void testIssueVerso() throws Exception {
+//        Ion.getDefault(getContext()).getHttpClient().getSSLSocketMiddleware().setSpdyEnabled(false);
+//        Ion.getDefault(getContext()).getConscryptMiddleware().enable(false);
+
+        Ion.with(getContext())
+        .load("https://versoworks.com/images/vwlogo.png")
+        .setLogging("Verso", Log.VERBOSE)
+        .asByteArray()
+        .get();
+    }
+
+    public void testIssue714() throws Exception {
+        AsyncHttpServer server = new AsyncHttpServer();
+        server.post("/test", new HttpServerRequestCallback() {
+            @Override
+            public void onRequest(AsyncHttpServerRequest request, AsyncHttpServerResponse response) {
+                response.send(request.getHeaders().get("Authorization"));
+            }
+        });
+        int port = server.listen(Ion.getDefault(getContext()).getServer(), 0).getLocalPort();
+        String auth = "";
+        for (int i = 0; i < 2048; i++) {
+            auth += (char)('0' + (i % 10));
+        }
+        System.out.println(auth);
+        assertEquals(auth, Ion.with(getContext())
+        .load("http://localhost:" + port + "/test")
+        .setHeader("Authorization", auth)
+        .setStringBody("testtest")
+        .asString()
+        .get());
+    }
+
+    public void testIssue760() throws Exception {
+        // https://github.com/koush/ion/issues/760
+        byte[] bytes = Ion.with(getContext())
+                .load("https://media.giphy.com/media/ykzXbY24BFqY8/giphy.gif")
+                .asByteArray()
+                .get();
+
+        GifDecoder decoder = new GifDecoder(bytes);
+
+        for (int i = 0; i <= 3; i++) {
+            // Skip to the interesting frames.
+            decoder.nextFrame();
+        }
+
+        // Get frame 4's pixel value.
+        int frame4Pixel = decoder.nextFrame().image.getPixel(35, 200);
+
+        // Get frame 5's pixel value which reproduces the incorrect value.
+        int frame5Pixel = decoder.nextFrame().image.getPixel(35, 200);
+
+        // The pixel value should not have changed between frame 4 and frame 5.
+        String assertionMessage = "{Pixel(35,200,4): " + Integer.toHexString(frame4Pixel)
+                + "} should be equal to {Pixel(35,200,5): " + Integer.toHexString(frame5Pixel) + "}";
+        Assert.assertEquals(assertionMessage, frame4Pixel, frame5Pixel);
     }
 }

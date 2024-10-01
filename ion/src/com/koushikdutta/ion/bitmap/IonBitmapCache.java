@@ -74,7 +74,6 @@ public class IonBitmapCache {
     }
 
     public void put(BitmapInfo info) {
-        assert Thread.currentThread() == Looper.getMainLooper().getThread();
         int maxSize = (int)(getHeapSize(ion.getContext()) * heapRatio);
         if (maxSize != cache.maxSize())
             cache.setMaxSize(maxSize);
@@ -82,7 +81,6 @@ public class IonBitmapCache {
     }
 
     public void putSoft(BitmapInfo info) {
-        assert Thread.currentThread() == Looper.getMainLooper().getThread();
         cache.putSoft(info.key, info);
     }
 
@@ -92,7 +90,16 @@ public class IonBitmapCache {
 
         // see if this thing has an immediate cache hit
         BitmapInfo ret = cache.getBitmapInfo(key);
-        if (ret == null || ret.exception == null)
+        if (ret == null)
+            return null;
+        if (ret.bitmap != null && ret.bitmap.isRecycled()) {
+            Log.w("ION", "Cached bitmap was recycled.");
+            Log.w("ION", "This may happen if passing Ion bitmaps directly to notification builders or remote media clients.");
+            Log.w("ION", "Create a deep copy before doing this.");
+            cache.remove(key);
+            return null;
+        }
+        if (ret.exception == null)
             return ret;
 
         // if this bitmap load previously errored out, see if it is time to retry
@@ -128,7 +135,7 @@ public class IonBitmapCache {
         if (o.outWidth < 0 || o.outHeight < 0)
             throw new BitmapDecodeException(o.outWidth, o.outHeight);
         Point target = computeTarget(minx, miny);
-        int scale = Math.max(o.outWidth / target.x, o.outHeight / target.y);
+        int scale = Math.round(Math.max((float)o.outWidth / target.x, (float)o.outHeight / target.y));
         BitmapFactory.Options ret = new BitmapFactory.Options();
         ret.inSampleSize = scale;
         ret.outWidth = o.outWidth;
@@ -177,8 +184,6 @@ public class IonBitmapCache {
     }
 
     public static Bitmap loadBitmap(byte[] bytes, int offset, int length, BitmapFactory.Options o) {
-        assert Thread.currentThread() != Looper.getMainLooper().getThread();
-
         Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, offset, length, o);
         if (bitmap == null)
             return null;
@@ -194,8 +199,6 @@ public class IonBitmapCache {
     }
 
     public static Bitmap loadBitmap(Resources res, int id, BitmapFactory.Options o) {
-        assert Thread.currentThread() != Looper.getMainLooper().getThread();
-
         int rotation;
         InputStream in = null;
         try {
@@ -214,8 +217,6 @@ public class IonBitmapCache {
     }
 
     public static Bitmap loadBitmap(InputStream stream, BitmapFactory.Options o) throws IOException {
-        assert Thread.currentThread() != Looper.getMainLooper().getThread();
-
         int rotation;
         MarkableInputStream in = new MarkableInputStream(stream);
         in.mark(50000);
@@ -234,8 +235,6 @@ public class IonBitmapCache {
     }
 
     public static Bitmap loadBitmap(File file, BitmapFactory.Options o) {
-        assert Thread.currentThread() != Looper.getMainLooper().getThread();
-
         int rotation;
         FileInputStream fin = null;
         try {
